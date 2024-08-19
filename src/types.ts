@@ -1,104 +1,216 @@
-import { APIAccountEntity } from '@actual-app/api/@types/loot-core/server/api-models.js';
-import { TransactionEntity } from '@actual-app/api/@types/loot-core/types/models/transaction.js';
+export namespace SimpleFin {
+  export type Transaction = {
+    id: string;
+    posted: number;
+    amount: string;
+    description: string;
+    payee: string;
+    memo: string;
+    transacted_at: number;
+  };
 
-export type BudgetProps = {
-  url: string;
-  password: string;
-  dataDir: string;
-  budgetId: string;
-  syncId: string;
-};
+  export type TransactionWithAccountId = Transaction & { accountId: string };
 
-export type SimpleFinTransactionConfig = {
-  start?: number;
-  end?: number;
-  onlyData?: boolean;
-  pending?: 0 | 1;
-  filterAccounts?: string[];
-};
+  export type Account = {
+    org: {
+      domain: string;
+      name: string;
+      'sfin-url': string;
+      url: string;
+      id: string;
+    };
+    id: string;
+    name: string;
+    currency: string;
+    balance: string;
+    'available-balance': string;
+    'balance-date': number;
+    transactions: SimpleFin.Transaction[];
+  };
 
-export interface SimpleFinAccount {
-  org: Org;
-  id: string;
-  name: string;
-  currency: string;
-  balance: string;
-  'available-balance': string;
-  'balance-date': number;
-  transactions: SimpleFinTransaction[];
+  export type Query = GenericQuery & {
+    onlyData?: boolean;
+    pending?: 0 | 1;
+    filterAccounts?: string[];
+  };
 }
 
-export interface Org {
-  domain: string;
-  name: string;
-  'sfin-url': string;
-  url: string;
-  id: string;
+export namespace TBudget {
+  export type Props = {
+    url: string;
+    password: string;
+    dataDir: string;
+    budgetId: string;
+    syncId: string;
+  };
+
+  export type TransactionQuery = GenericQuery & {
+    accountId: string;
+    transactionIds?: string[];
+  };
+
+  export type CategoryGroup = {
+    id: string;
+    name: string;
+    hidden: boolean;
+    categories: Category[];
+  };
+
+  export type Category = {
+    id: string;
+    name: string;
+    isIncome: boolean;
+    hidden: boolean;
+    groupId: string;
+  };
+
+  export type Payee = {
+    id: string;
+    name: string;
+    transferId: string | null;
+  };
+
+  export type Account = {
+    id: string;
+    name: string;
+    offbudget: boolean;
+    closed: boolean;
+  };
+
+  export type TransactionCreate = {
+    accountId: string;
+    date: Date;
+    payeeId?: string;
+    payeeName?: string;
+    importedPayee?: string;
+    categoryId?: string;
+    notes?: string;
+    imported_id?: string;
+    transfer_id?: string;
+    cleared?: boolean;
+    subTransactions?: Transaction[];
+  };
+
+  export type TransactionCreateResponse = {
+    errors?: {
+      message: string;
+    }[];
+    added: string[];
+    updated: string[];
+  };
+
+  export type Transfer = {
+    account: {
+      source: string;
+      target: string;
+      sourceAccountName: string;
+      targetAccountName: string;
+    };
+    transaction: {
+      date: Date;
+      source: string;
+      target: string;
+      sourceAmount: number;
+      targetAmount: number;
+    };
+  };
+
+  export type AccountCreate = {
+    id: string;
+    name: string;
+    type: AccountType;
+    offbudget: boolean;
+    balance: number;
+  };
+
+  export type Classification = {
+    transactionId: string;
+    accountId: string;
+    categoryId: string;
+    categoryName: string;
+  };
+
+  export type NativeMonthResponse = {
+    month: string;
+    incomeAvailable: number;
+    lastMonthOverspent: number;
+    forNextMonth: number;
+    totalBudgeted: number;
+    toBudget: number;
+    fromLastMonth: number;
+    totalIncome: number;
+    totalSpent: number;
+    totalBalance: number;
+    categoryGroups: Array<{
+      id: string;
+      name: string;
+      is_income: boolean;
+      hidden: boolean;
+      budgeted: number;
+      spent: number;
+      balance: number;
+      categories: Array<{
+        id: string;
+        name: string;
+        is_income: boolean;
+        hidden: boolean;
+        group_id: string;
+        budgeted: number;
+        spent: number;
+        balance: number;
+        carryover: boolean;
+      }>;
+    }>;
+  };
+
+  export type Month = {
+    month: string;
+    incomeAvailable: number;
+    lastMonthOverspent: number;
+    forNextMonth: number;
+    totalBudgeted: number;
+    toBudget: number;
+    fromLastMonth: number;
+    totalIncome: number;
+    totalSpent: number;
+    totalBalance: number;
+    categoryGroups: Array<
+      Omit<CategoryGroup, 'categories'> & {
+        budgeted: number;
+        spent: number;
+        balance: number;
+        categories: Array<
+          Category & {
+            budgeted: number;
+            spent: number;
+            balance: number;
+            carryover: boolean;
+          }
+        >;
+      }
+    >;
+  };
+
+  export type Transaction = {
+    id: string;
+    accountId: string;
+    categoryId: string;
+    amount: number;
+    payeeId: string;
+    notes: string | null;
+    date: Date;
+    importedId: string | null;
+    importedPayee: string;
+    transferId: string | null;
+    cleared: boolean;
+    reconciled: boolean;
+    subTransactions: string[];
+  };
 }
 
-export interface SimpleFinTransaction {
-  id: string;
-  posted: number;
-  amount: string;
-  description: string;
-  payee: string;
-  memo: string;
-  transacted_at: number;
-}
-
-export interface Category {
-  id?: string;
-  name: string;
-  is_income?: boolean;
-  cat_group?: string;
-  sort_order?: number;
-  tombstone?: boolean;
-  hidden?: boolean;
-}
-
-export interface CategoryGroup {
-  id?: string;
-  name: string;
-  is_income?: boolean;
-  sort_order?: number;
-  tombstone?: boolean;
-  hidden?: boolean;
-  categories?: Category[];
-}
-
-export interface Payee {
-  id: string;
-  name: string;
-  transfer_acct?: string;
-  tombstone?: boolean;
-}
-
-export type Transaction = TransactionEntity & {
-  payee: string;
-  account: string;
-};
-
-export type Account = APIAccountEntity;
-
-export interface CreateTransactionInput {
-  accountId: string;
-  date: Date;
-  payeeId?: string;
-  payeeName?: string;
-  importedPayee?: string;
-  categoryId?: string;
-  notes?: string;
-  imported_id?: string;
-  transfer_id?: string;
-  cleared?: boolean;
-  subTransactions?: Transaction[];
-}
-
-export type AccountCreation = {
-  id: string;
-  name: string;
-  balance: number;
-  offbudget: boolean;
+type GenericQuery = {
+  start: Date;
+  end: Date;
 };
 
 export enum AccountType {
@@ -110,39 +222,3 @@ export enum AccountType {
   DEBT = 'debt',
   OTHER = 'other',
 }
-
-export type TransactionClassification = {
-  transactionId: string;
-  accountId: string;
-  categoryId: string;
-  categoryName: string;
-};
-
-export type BudgetMonth = {
-  month: string;
-  incomeAvailable: number;
-  lastMonthOverspent: number;
-  forNextMonth: number;
-  totalBudgeted: number;
-  toBudget: number;
-  fromLastMonth: number;
-  totalIncome: number;
-  totalSpent: number;
-  totalBalance: number;
-  categoryGroups: Array<
-    CategoryGroup & {
-      budgeted: number;
-      spent: number;
-      balance: number;
-      categories: Array<
-        Category & {
-          balance: number;
-          budgeted: number;
-          carryover: boolean;
-          group_id: string;
-          spent: number;
-        }
-      >;
-    }
-  >;
-};

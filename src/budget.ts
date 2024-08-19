@@ -1,18 +1,8 @@
 import * as api from '@actual-app/api';
-import {
-  SimpleFinAccount,
-  BudgetProps,
-  CategoryGroup,
-  SimpleFinTransaction,
-  SimpleFinTransactionConfig,
-  Transaction,
-  Account,
-  AccountType,
-  TransactionClassification,
-} from './types.ts';
+import { SimpleFin, TBudget } from './types.ts';
 import * as fs from 'fs';
 import { loadTransactions } from './simpleFin.ts';
-import { APIPayeeEntity } from '@actual-app/api/@types/loot-core/server/api-models.js';
+import moment from 'moment';
 
 export class Budget {
   private static connected = false;
@@ -38,7 +28,7 @@ export class Budget {
     return this.budgetSyncId;
   }
 
-  constructor({ budgetId, dataDir, url, password, syncId }: BudgetProps) {
+  constructor({ budgetId, dataDir, url, password, syncId }: TBudget.Props) {
     this.budgetId = budgetId;
     this.password = password;
     this.url = url;
@@ -67,7 +57,7 @@ export class Budget {
     return api;
   }
 
-  async loadBudget(): Promise<void> {
+  async loadBudget(force = true): Promise<void> {
     const connection = await this.getConnection();
     if (!this.isBudgetDownloaded()) {
       await connection.downloadBudget(this.syncId);
@@ -76,55 +66,71 @@ export class Budget {
 
     await connection.sync();
 
-    const accounts = await this.getAccounts();
+    if (force) {
+      const accounts = await this.getAccounts();
 
-    await Promise.all(accounts.map((acc) => connection.deleteAccount(acc.id)));
+      await Promise.all(
+        accounts.map((acc) => connection.deleteAccount(acc.id)),
+      );
+    }
 
     await connection.sync();
   }
 
-  async pullSimpleFin(
-    config: SimpleFinTransactionConfig,
-  ): Promise<SimpleFinAccount[]> {
+  async pullSimpleFin(config: SimpleFin.Query): Promise<SimpleFin.Account[]> {
     return loadTransactions(config);
   }
 
-  async getCategoryGroups(): Promise<CategoryGroup[]> {
+  async getCategoryGroups(): Promise<TBudget.CategoryGroup[]> {
     const connection = await this.getConnection();
 
-    return connection.getCategoryGroups();
+    const categoryGroups = await connection.getCategoryGroups();
+
+    return categoryGroups.map((group) => {
+      return {
+        id: group.id ?? '',
+        hidden: group.hidden ?? false,
+        name: group.name,
+        categories: group.categories.map((category) => {
+          return {
+            id: category.id,
+            name: category.name,
+            isIncome: !!category.is_income,
+            hidden: !!category.hidden,
+            groupId: category.group_id,
+          };
+        }),
+      };
+    });
   }
 
-  async getPayees(ids?: string): Promise<APIPayeeEntity[]> {
+  async getPayees(ids?: string[]): Promise<TBudget.Payee[]> {
     const connection = await this.getConnection();
 
     const payees = await connection.getPayees();
 
+    const finalPayees = payees.map((payee) => ({
+      ...payee,
+      transferId: payee.transfer_acct,
+    }));
+
     if (ids?.length) {
-      return payees.filter((payee) => ids.includes(payee.id));
+      return finalPayees.filter((payee) => ids.includes(payee.id));
     }
 
-    return payees;
+    return finalPayees;
   }
 
-  async getAccounts(): Promise<Account[]> {
+  async getAccounts(): Promise<TBudget.Account[]> {
     const connection = await this.getConnection();
 
     return connection.getAccounts();
   }
 
-  async createAccount(
-    account: {
-      id: string;
-      name: string;
-      type: AccountType;
-      offbudget: boolean;
-    },
-    balance: number,
-  ): Promise<string> {
+  async createAccount(account: TBudget.AccountCreate): Promise<string> {
     const connection = await this.getConnection();
 
-    const accountId = connection.createAccount(account, balance);
+    const accountId = connection.createAccount(account, account.balance);
 
     await connection.sync();
 
@@ -133,14 +139,8 @@ export class Budget {
 
   async createTransactions(
     accountId: string,
-    simpleFinTransactions: SimpleFinTransaction[],
-  ): Promise<{
-    errors?: {
-      message: string;
-    }[];
-    added: string[];
-    updated: string[];
-  }> {
+    simpleFinTransactions: SimpleFin.Transaction[],
+  ): Promise<TBudget.TransactionCreateResponse> {
     const connection = await this.getConnection();
     await connection.sync();
     const result = await connection.importTransactions(
@@ -160,7 +160,7 @@ export class Budget {
   }
 
   async updateTransactionCategories(
-    classifications: TransactionClassification[],
+    classifications: TBudget.Classification[],
   ): Promise<void> {
     const connection = await this.getConnection();
 
@@ -173,29 +173,85 @@ export class Budget {
     });
   }
 
-  async getTransactions(input: {
-    accountId: string;
-    transactionIds?: string[];
-    start: Date;
-    end: Date;
-  }): Promise<Transaction[]> {
+  async getTransactions(
+    input: TBudget.TransactionQuery,
+  ): Promise<TBudget.Transaction[]> {
     const connection = await this.getConnection();
 
-    const transactions = await connection.getTransactions(
+    const budgetTransactions = await connection.getTransactions(
       input.accountId,
       input.start,
       input.end,
     );
 
+    const transactions: TBudget.Transaction[] = budgetTransactions.map((t) => {
+      return {
+        accountId: t.account?.toString(),
+        amount: api.utils.integerToAmount(t.amount),
+        categoryId: t.category?.toString(),
+        id: t.id,
+        cleared: t.cleared ?? false,
+        date: moment(t.date).toDate(),
+        importedId: t.imported_id ?? null,
+        importedPayee: t.imported_payee ?? '',
+        notes: t.notes ?? null,
+        payeeId: t.payee?.toString() ?? null,
+        reconciled: t.reconciled ?? false,
+        subTransactions: t.subtransactions?.map((st) => st.id) ?? [],
+        transferId: t.transfer_id ?? null,
+      };
+    });
+
     if (input.transactionIds) {
-      return transactions.filter((t) =>
-        input.transactionIds.includes(t.id),
-      ) as Transaction[];
+      return transactions.filter((t) => input.transactionIds.includes(t.id));
     }
 
-    return transactions as Transaction[];
+    return transactions;
+  }
+
+  async getMonth(month: string): Promise<TBudget.Month> {
+    const connection = await this.getConnection();
+
+    const budgetMonth = (await connection.getBudgetMonth(
+      month,
+    )) as TBudget.NativeMonthResponse;
+
+    return {
+      month: budgetMonth.month,
+      incomeAvailable: api.utils.integerToAmount(budgetMonth.incomeAvailable),
+      lastMonthOverspent: api.utils.integerToAmount(
+        budgetMonth.lastMonthOverspent,
+      ),
+      forNextMonth: api.utils.integerToAmount(budgetMonth.forNextMonth),
+      totalBudgeted: api.utils.integerToAmount(budgetMonth.totalBudgeted),
+      toBudget: api.utils.integerToAmount(budgetMonth.toBudget),
+      fromLastMonth: api.utils.integerToAmount(budgetMonth.fromLastMonth),
+      totalIncome: api.utils.integerToAmount(budgetMonth.totalIncome),
+      totalSpent: api.utils.integerToAmount(budgetMonth.totalSpent),
+      totalBalance: api.utils.integerToAmount(budgetMonth.totalBalance),
+      categoryGroups: budgetMonth.categoryGroups.map((group) => {
+        return {
+          id: group.id.toString(),
+          name: group.name.toString(),
+          hidden: !!group.hidden,
+          budgeted: api.utils.integerToAmount(group.budgeted) ?? 0,
+          spent: api.utils.integerToAmount(group.spent),
+          balance: api.utils.integerToAmount(group.balance),
+          categories: group.categories.map((cat) => {
+            return {
+              id: cat.id,
+              name: cat.name,
+              isIncome: cat.is_income,
+              hidden: cat.hidden,
+              groupId: cat.group_id,
+              budgeted: cat.budgeted,
+              spent: cat.spent,
+              balance: cat.balance,
+              carryover: cat.carryover,
+            };
+          }),
+        };
+      }),
+    };
   }
 }
-
-//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
-//"https://openrouter.ai/api/v1"

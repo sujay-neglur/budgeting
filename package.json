@@ -34,12 +34,13 @@
     "test": "jest --coverage",
     "prettier": "prettier --config .prettierrc --write .",
     "test:watch": "jest --watch",
-    "dev": "tsx src/start.ts"
+    "dev": "tsx src/start.ts",
+    "exp": "tsx src/test.ts"
   },
   "author": "Jakub Synowiec <jsynowiec@users.noreply.github.com>",
   "license": "Apache-2.0",
   "dependencies": {
-    "@actual-app/api": "^6.8.2",
+    "@actual-app/api": "6.8.2",
     "actualAi": "git@github.com:sakowicz/actual-ai.git#c72a9c359c7f52610c275c24d992d919c0f578b4",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",

@@ -2,12 +2,12 @@ import moment from 'moment';
 import { Budget } from './budget.ts';
 import { config, AccountMapping } from './config.ts';
 import { accountsToCreate } from './util.ts';
-import { SimpleFinAccount, TransactionClassification } from './types.ts';
+import { SimpleFin, TBudget } from './types.ts';
 import { ask } from './openai.ts';
 
 async function createNecessaryAccounts(
   budget: Budget,
-  simpleFinData: SimpleFinAccount[],
+  simpleFinData: SimpleFin.Account[],
 ): Promise<void> {
   await budget.loadBudget();
   console.log(
@@ -21,22 +21,20 @@ async function createNecessaryAccounts(
 
   await Promise.all(
     necessarayAccounts.map((account) =>
-      budget.createAccount(
-        {
-          id: account.id,
-          name: AccountMapping[account.id].name,
-          type: AccountMapping[account.id].type,
-          offbudget: account.offbudget,
-        },
-        account.balance,
-      ),
+      budget.createAccount({
+        id: account.id,
+        name: AccountMapping[account.id].name,
+        type: AccountMapping[account.id].type,
+        offbudget: account.offbudget,
+        balance: account.balance,
+      }),
     ),
   );
 }
 
 async function convertSimpleFinTransactionAndPush(
   budget: Budget,
-  simpleFinData: SimpleFinAccount[],
+  simpleFinData: SimpleFin.Account[],
 ): Promise<string[]> {
   const budgetAccounts = await budget.getAccounts();
 
@@ -62,8 +60,8 @@ async function convertSimpleFinTransactionAndPush(
 async function categorizeTransactions(
   budget: Budget,
   transactionIds: string[],
-  simpleFinData: SimpleFinAccount[],
-): Promise<TransactionClassification[]> {
+  simpleFinData: SimpleFin.Account[],
+): Promise<TBudget.Classification[]> {
   if (transactionIds.length) {
     const budgetAccounts = await budget.getAccounts();
     const categoryGroups = await budget.getCategoryGroups();
@@ -90,21 +88,6 @@ async function categorizeTransactions(
       transactionsWithAccountIds.flatMap((t) => t),
       payees,
     );
-    // for (const simpleFinAccount of simpleFinData) {
-    //   const accountName = AccountMapping[simpleFinAccount.id].name;
-    //   const accountId = budgetAccounts.find(
-    //     (acc) => acc.name === accountName,
-    //   ).id;
-
-    //   const transactions = await budget.getTransactions({
-    //     accountId,
-    //     transactionIds,
-    //     start: moment('2024-07-01').toDate(),
-    //     end: moment().endOf('day').toDate(),
-    //   });
-
-    //   await testOpenRouter(categoryGroups, transactions, payees);
-    // }
   }
 
   return [];
@@ -112,7 +95,7 @@ async function categorizeTransactions(
 
 async function updateTransactionCategories(
   budget: Budget,
-  classifications: TransactionClassification[],
+  classifications: TBudget.Classification[],
 ): Promise<void> {
   await budget.updateTransactionCategories(classifications);
 }
@@ -129,8 +112,8 @@ async function start(): Promise<void> {
     });
 
     const simpleFinData = await budget.pullSimpleFin({
-      start: moment('2024-07-01').unix(),
-      end: moment().unix(),
+      start: moment('2024-07-01').toDate(),
+      end: moment().toDate(),
       pending: 1,
       filterAccounts: Object.keys(AccountMapping),
     });

@@ -1,7 +1,7 @@
-import { AccountType, BudgetProps } from './types.ts';
+import { AccountType, TBudget } from './types.ts';
 import 'dotenv/config';
 
-const config: BudgetProps = {
+const config: TBudget.Props = {
   budgetId: process.env.BUDGET_ID,
   dataDir: process.env.DATA_DIR,
   password: process.env.PASSWORD,

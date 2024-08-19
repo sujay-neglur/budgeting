@@ -1,8 +1,6 @@
 import axios from 'axios';
-import { SimpleFinAccount, SimpleFinTransactionConfig } from './types.ts';
-
-const url =
-  'https://0116D9F94D9A73CA88CC4722CE522EC8AE2FA3AF4A508CD04B9BE34DF7FD4DCE:86258BB7644796070400744CA0426BF84C074C67262E9631403D01CD8E17F2C7@beta-bridge.simplefin.org/simplefin';
+import { SimpleFin } from './types.ts';
+import moment from 'moment';
 
 export async function loadTransactions({
   start,
@@ -10,15 +8,15 @@ export async function loadTransactions({
   onlyData,
   pending,
   filterAccounts,
-}: SimpleFinTransactionConfig): Promise<SimpleFinAccount[]> {
+}: SimpleFin.Query): Promise<SimpleFin.Account[]> {
   try {
     const response = await axios.get<{
       error: Error[];
-      accounts: SimpleFinAccount[];
-    }>(`${url}/accounts`, {
+      accounts: SimpleFin.Account[];
+    }>(`${process.env.SIMPLE_FIN_URL}/accounts`, {
       params: {
-        'start-date': start,
-        'end-date': end,
+        'start-date': moment(start).unix(),
+        'end-date': moment(end).unix(),
         pending,
       },
     });
